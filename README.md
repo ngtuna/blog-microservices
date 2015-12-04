@@ -2,7 +2,7 @@
 
 Source code for blogs regarding microservices at http://callistaenterprise.se/blogg/teknik/
 
-# REQUIRED COMPONENTS
+# Required components
 Central Configuration server
 Instead of a local configuration per deployed unit (i.e. microservice) we need a centralized management of configuration. We also need a configuration API that the microservices can use to fetch configuration information.
 
@@ -32,8 +32,8 @@ To protect the exposed API services the OAuth 2.0 standard is recommended. Apply
 * The API services will act as OAuth Resource Server
 * The external API consumers will act as OAuth Clients
 * The edge server will act as a OAuth Token Relay meaning:
-** It will act as a OAuth Resource Server
-** It will pass through the OAuth Access Tokens that comes in the extern request to the API services
+    * It will act as a OAuth Resource Server
+    * It will pass through the OAuth Access Tokens that comes in the extern request to the API services
 Note: Over time the OAuth 2.0 standard will most probably be complemented with the OpenID Connect standard to provide improved authorization functionality.
 
 # Eureka, Ribbon and Zuul
@@ -95,3 +95,53 @@ public ResponseEntity<List<Recommendation>> getReviews(int productId) {
 The service consumer only need to know about the name of the service (`review`), `Ribbon` (i.e. the LoadBalancerClient class) will find a service instance and return its URI to the service consumer.
 For a complete example see `Util.java` and `ProductCompositeIntegration.java`
 
+# Circuit Breaker and Monitoring
+## Circuit Breaker: Netflix Hystrix
+Netflix Hystrix provides circuit breaker capabilities to a service consumer. If a service doesn’t respond (e.g. due to a timeout or a communication error), Hystrix can redirect the call to an internal fallback method in the service consumer. If a service repeatedly fails to respond, Hystrix will open the circuit and fast fail (i.e. call the internal fallback method without trying to call the service) on every subsequent call until the service is available again. To determine wether the service is available again Hystrix allow some requests to try out the service even if the circuit is open. Hystrix executes embedded within its service consumer.
+
+## Monitoring: Netflix Hystrix dashboard and Turbine
+Hystrix dashboard can be used to provide a graphical overview of circuit breakers and Turbine can, based on information in Eureka, provide the dashboard with information from all circuit breakers in a system landscape.
+
+## Source code walkthrough
+### Gradle dependencies
+Since Hystrix use `RabbitMQ` to communicate between circuit breakers and dashboards we also need to setup dependencies for that as well. For a service consumer, that want to use Hystrix as a circuit breaker, we need to add:
+```
+compile("org.springframework.cloud:spring-cloud-starter-hystrix:1.0.0.RELEASE")
+compile("org.springframework.cloud:spring-cloud-starter-bus-amqp:1.0.0.RELEASE")
+compile("org.springframework.cloud:spring-cloud-netflix-hystrix-amqp:1.0.0.RELEASE")
+```
+For a complete example see `product-composite-service/build.gradle`.
+To be able to setup an Turbine server add the following dependency:
+```
+compile('org.springframework.cloud:spring-cloud-starter-turbine-amqp:1.0.0.RELEASE')
+```
+For a complete example see `turbine/build.gradle`.
+### Infrastructure servers
+Set up a `Turbine` server by adding the annotation `@EnableTurbineAmqp` to a standard Spring Boot application:
+```
+@SpringBootApplication
+@EnableTurbineAmqp
+@EnableDiscoveryClient
+public class TurbineApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(TurbineApplication.class, args);
+    }
+
+}
+```
+For a complete example see `TurbineApplication.java`.
+To setup a Hystrix Dashboard add the annotation `@EnableHystrixDashboard` instead. For a complete example see `HystrixDashboardApplication.java`.
+### Business services
+To enable Hystrix, add a `@EnableCircuitBreaker` annotation to your Spring Boot application. To actually put Hystrix in action, annotate the method that Hystrix shall monitor with `@HystrixCommand` where we also can specify a fallback-method, e.g.:
+```
+@HystrixCommand(fallbackMethod = "defaultReviews")
+public ResponseEntity<List<Review>> getReviews(int productId) {
+    ...
+}
+
+public ResponseEntity<List<Review>> defaultReviews(int productId) {
+    ...
+}
+```
+The fallback method is used by Hystrix in case of an error (call to the service fails or a timeout occurs) or to fast fail if the circuit is open. For a complete example see `ProductCompositeIntegration.java`.
