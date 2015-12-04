@@ -145,3 +145,59 @@ public ResponseEntity<List<Review>> defaultReviews(int productId) {
 }
 ```
 The fallback method is used by Hystrix in case of an error (call to the service fails or a timeout occurs) or to fast fail if the circuit is open. For a complete example see `ProductCompositeIntegration.java`.
+
+# Authentication with OAuth2.0
+We will create a secure API for external access, using `OAuth 2.0` by adding a new microservice `product-api`...
+
+# Dockerize your microservices
+## Build Docker images with gradle
+To build Spring application into Docker container, the most important additions to the Gradle build-files are:
+```
+buildscript {
+    dependencies {
+        classpath 'se.transmode.gradle:gradle-docker:1.2'
+
+...
+
+apply plugin: 'docker'
+
+...
+
+group = 'callista'
+mainClassName = 'se.callista.microservises.core.review.ReviewServiceApplication'
+
+...
+
+distDocker {
+    exposePort 8080
+    setEnvironment 'JAVA_OPTS', '-Dspring.profiles.active=docker'
+}
+
+docker {
+    maintainer = 'Magnus Larsson <magnus.larsson.ml@gmail.com>'
+    baseImage = 'java:8'
+}
+```
+## Configure the microservices for a Docker environment using Spring profiles
+To keep the Docker specific configuration separate from the rest we use a `Spring Profile` called `Docker` in our `application.yml` files, e.g.:
+```
+---
+# For deployment in Docker containers
+spring:
+  profiles: docker
+
+server:
+  port: 8080
+
+eureka:
+  instance:
+    preferIpAddress: true
+  client:
+    serviceUrl:
+      defaultZone: http://discovery:8761/eureka/
+```
+## Securing access using HTTPS
+<not talk too much about this topic>
+
+## Managing your docker containers using Docker compose
+Show off `docker-compose.yml` file.
