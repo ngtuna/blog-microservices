@@ -1,0 +1,2 @@
+# Pattern: Service discovery
+## Context
