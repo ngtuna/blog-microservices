@@ -16,4 +16,3 @@
 Others requirements:
 - Database per services
 - multiple services per host/vm
--
